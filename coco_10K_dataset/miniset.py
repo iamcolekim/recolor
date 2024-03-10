@@ -71,7 +71,7 @@ def ask_should_delete(filename, ignore = False):
         return False
 
 def remove_corrupted(image_files):
-    corrputed_images = []
+    corrupted_images = []
     cleaning = ask_cleaning_type("corrupted")
     def is_corrupted_image(img_path):
         try:
@@ -85,7 +85,7 @@ def remove_corrupted(image_files):
             # Corrupted Images require no user confirmation
             print(f"Corrupted image: {str(filename)}")
             corrputed_images.append(filename)
-    return remove_images(image_files, corrputed_images, cleaning)
+    return remove_images(image_files, corrupted_images, cleaning)
 
 def remove_duplicate_images(image_files):
     duplicate_images = []
@@ -105,6 +105,10 @@ def remove_duplicate_images(image_files):
 
 
 def remove_extreme_aspect_ratio(image_files, min_ratio=0.5, max_ratio=2):
+    # aspect ratio is width / height and should ideally be 1
+    # there is a risk of losing information if the aspect ratio is too extreme
+    # images should ideally include the subject, and not too much background
+    # 0.5 -> 1:2, 2 -> 2:1. Ratios beyond this are considered extreme
     meta_data_missing_images = []
     cleaning = ask_cleaning_type("extreme aspect ratio")
     if not cleaning:
@@ -127,11 +131,11 @@ def remove_monochrome_images(image_files):
     cleaning = ask_cleaning_type("monochrome")
     if not cleaning:
         will_ignore = ask_ignore_outliers()
-    def is_monochrome(img_path, threshold=5):
+    def is_monochrome(img_path, threshold=2):
         img = cv2.imread(img_path)
-        if len(img.shape) < 3:
+        if len(img.shape) < 3: # no color channels
             return True
-        if img.shape[2] == 1:
+        if img.shape[2] == 1: # single color channel, eg. grayscale
             return True
         std_dev = np.std(img, axis=(0, 1))
         return np.all(std_dev < threshold)
@@ -149,7 +153,7 @@ def remove_unusual_color_distribution(image_files):
     cleaning = ask_cleaning_type("unusual color distribution")
     if not cleaning:
         will_ignore = ask_ignore_outliers()
-    def has_unusual_colors(img_path, threshold=0.7):
+    def has_unusual_colors(img_path, threshold=0.55):
         img = cv2.imread(img_path)
         hist = cv2.calcHist([img], [0, 1, 2], None, [256, 256, 256], [0, 256, 0, 256, 0, 256])
         max_val = np.max(hist)
@@ -161,6 +165,46 @@ def remove_unusual_color_distribution(image_files):
             if ask_should_delete(filename, will_ignore):
                 unusual_color_images.append(filename)
     return remove_images(image_files, unusual_color_images, cleaning)
+
+def remove_blurry_images(image_files, threshold=75):
+    blurry_images = []
+    cleaning = ask_cleaning_type("blurry")
+    if not cleaning:
+        will_ignore = ask_ignore_outliers()
+    def is_blurry(img_path):
+        img = cv2.imread(img_path)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        fm = cv2.Laplacian(gray, cv2.CV_64F).var()
+        return fm < threshold
+    for filename in image_files:
+        if is_blurry(str(filename)):
+            print(f"Blurry image: {str(filename)}")
+            display_image(filename)
+            if ask_should_delete(filename, will_ignore):
+                blurry_images.append(filename)
+    return remove_images(image_files, blurry_images, cleaning)
+
+def remove_low_resolution_images(image_files, min_resolution=256):
+    #256 is a good starting point for minimum resolutions
+    # alternatives dependent on size of original training dataset, nn architecture, and GPU, among other factors
+    # some common alternatives include:
+        # 512 (some Kaggle seem to set this as a minimum for much, much larger networks)
+        # any alternative should be about the same resolution as those used by the network for training/feedforward.
+    low_res_images = []
+    cleaning = ask_cleaning_type("low resolution")
+    if not cleaning:
+        will_ignore = ask_ignore_outliers()
+    def is_low_resolution(img_path):
+        img = cv2.imread(img_path)
+        h, w = img.shape[:2]
+        return h < min_resolution or w < min_resolution
+    for filename in image_files:
+        if is_low_resolution(str(filename)):
+            print(f"Low-resolution image: {str(filename)}")
+            display_image(filename)
+            if ask_should_delete(filename, will_ignore):
+                low_res_images.append(filename)
+    return remove_images(image_files, low_res_images, cleaning)
 
 # Augmentation Handling Methods
 #TODO: Add augmentation handling methods later
@@ -236,20 +280,21 @@ def main():
     image_files = list(dataset_dir.glob('**/*'))
     image_files = [img for img in image_files if img.suffix in IMG_EXTENSIONS]
 
-    # Display the first image in the dataset
-    display_image(image_files[0])
+    # Display the first image in the dataset as a test
+    # display_image(image_files[0]) # Testing works, not necessary for final code
 
     # Handle outliers in the dataset
 
     # Remove non-starters (always delete if cleaning, always ignore if not cleaning)
-    image_files = remove_corrupted(image_files)
-    image_files = remove_duplicate_images(image_files)
+    # image_files = remove_corrupted(image_files)
+    # image_files = remove_duplicate_images(image_files)
 
     # Remove with user-confirmation (human verification necessary if cleaning or ignoring)
     # image_files = remove_extreme_aspect_ratio(image_files)
-    # image_files = remove_monochrome_images(image_files)
-    image_files = remove_unusual_color_distribution(image_files)
-
+    image_files = remove_monochrome_images(image_files)
+    # image_files = remove_unusual_color_distribution(image_files)
+    # image_files = remove_blurry_images(image_files)
+    # image_files = remove_low_resolution_images(image_files)
     # Load the image dataset folder as an ImageFolder object
     dataset = ImageFolder(root=dataset_dir, transform=transforms, is_valid_file=lambda x: Path(x) in image_files)
 
