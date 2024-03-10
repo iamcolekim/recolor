@@ -76,15 +76,22 @@ def remove_corrupted(image_files):
     def is_corrupted_image(img_path):
         try:
             img = Image.open(img_path)
-            img.verify()
+            img.verify()  # verify that it is, in fact an image
+            img.close()  # close the resource
+
+            # Image.open() may do "lazy loading", so try a simple operation to see if the image data is not corrupted
+            img = Image.open(img_path)  # reopen it
+            img.transpose(Image.FLIP_LEFT_RIGHT)  # perform an operation to check if the image is still usable
+            img.close()
+
             return False
-        except (IOError, SyntaxError):
+        except (IOError, SyntaxError, TypeError):
             return True
     for filename in image_files:
         if is_corrupted_image(filename):
             # Corrupted Images require no user confirmation
             print(f"Corrupted image: {str(filename)}")
-            corrputed_images.append(filename)
+            corrupted_images.append(filename)
     return remove_images(image_files, corrupted_images, cleaning)
 
 def remove_duplicate_images(image_files):
@@ -109,7 +116,7 @@ def remove_extreme_aspect_ratio(image_files, min_ratio=0.5, max_ratio=2):
     # there is a risk of losing information if the aspect ratio is too extreme
     # images should ideally include the subject, and not too much background
     # 0.5 -> 1:2, 2 -> 2:1. Ratios beyond this are considered extreme
-    meta_data_missing_images = []
+    extreme_aspect_ratio_list = []
     cleaning = ask_cleaning_type("extreme aspect ratio")
     if not cleaning:
         will_ignore = ask_ignore_outliers()
@@ -121,29 +128,36 @@ def remove_extreme_aspect_ratio(image_files, min_ratio=0.5, max_ratio=2):
     for filename in image_files:
         if has_extreme_aspect_ratio(filename, min_ratio, max_ratio):
             print(f"Extreme aspect ratio: {str(filename)}")
-            display_image(filename)
+            #display_image(filename)
+            '''
             if ask_should_delete(filename, will_ignore):
-                meta_data_missing_images.append(filename)
-    return remove_images(image_files, meta_data_missing_images, cleaning)
+                extreme_aspect_ratio_list.append(filename)
+            '''
+            extreme_aspect_ratio_list.append(filename)
+    return remove_images(image_files, extreme_aspect_ratio_list, cleaning)
 
 def remove_monochrome_images(image_files):
+    # should remove near-monochrome images
+    # e.g. grayscale images, duotone, sepia, monotone or images with very little color variation
+    # may also include images with little color variation too, so some false positives will inevitably be included
     monochrome_images = []
     cleaning = ask_cleaning_type("monochrome")
     if not cleaning:
         will_ignore = ask_ignore_outliers()
-    def is_monochrome(img_path, threshold=2):
+    def is_monochrome(img_path, threshold=0.125):
         img = cv2.imread(img_path)
-        if len(img.shape) < 3: # no color channels
+        if len(img.shape) < 3:  # no color channels
             return True
-        if img.shape[2] == 1: # single color channel, eg. grayscale
+        if img.shape[2] == 1:  # single color channel, eg. grayscale
             return True
-        std_dev = np.std(img, axis=(0, 1))
-        return np.all(std_dev < threshold)
+        hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        hue_std_dev = np.std(hsv_img[:, :, 0] / 180.0)  # normalize hue values to range 0-1
+        return hue_std_dev < threshold
     
     for filename in image_files:
         if is_monochrome(str(filename)):
             print(f"Monochrome image: {str(filename)}")
-            display_image(filename)
+            # display_image(filename) #too many images to discover and display
             if ask_should_delete(filename, will_ignore):
                 monochrome_images.append(filename)
     return remove_images(image_files, monochrome_images, cleaning)
@@ -275,6 +289,7 @@ IMG_EXTENSIONS = (".jpg", ".jpeg", ".png", ".ppm", ".bmp", ".pgm", ".tif", ".tif
 def main():
     # Set the directory path for the dataset
     dataset_dir = Path('coco_10K_dataset/dataset/')
+    # dataset_dir = Path('coco_10K_dataset/test/')
 
     # Get the list of images in the dataset
     image_files = list(dataset_dir.glob('**/*'))
@@ -286,15 +301,17 @@ def main():
     # Handle outliers in the dataset
 
     # Remove non-starters (always delete if cleaning, always ignore if not cleaning)
-    # image_files = remove_corrupted(image_files)
-    # image_files = remove_duplicate_images(image_files)
+    image_files = remove_corrupted(image_files)
+    image_files = remove_duplicate_images(image_files)
+    
+    # Remove with user-confirmation, easy detection (no false positives, no human verification necessary for deletion)
+    image_files = remove_extreme_aspect_ratio(image_files)
 
-    # Remove with user-confirmation (human verification necessary if cleaning or ignoring)
-    # image_files = remove_extreme_aspect_ratio(image_files)
+    # Remove with user-confirmation (human verification necessary if cleaning or ignoring to check for false positives)
     image_files = remove_monochrome_images(image_files)
-    # image_files = remove_unusual_color_distribution(image_files)
-    # image_files = remove_blurry_images(image_files)
-    # image_files = remove_low_resolution_images(image_files)
+    image_files = remove_unusual_color_distribution(image_files)
+    image_files = remove_blurry_images(image_files)
+    image_files = remove_low_resolution_images(image_files)
     # Load the image dataset folder as an ImageFolder object
     dataset = ImageFolder(root=dataset_dir, transform=transforms, is_valid_file=lambda x: Path(x) in image_files)
 
