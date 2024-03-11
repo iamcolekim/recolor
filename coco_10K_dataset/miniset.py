@@ -310,8 +310,8 @@ IMG_EXTENSIONS = (".jpg", ".jpeg", ".png", ".ppm", ".bmp", ".pgm", ".tif", ".tif
 # driver code
 def main():
     # Set the directory path for the dataset
-    dataset_dir = Path('coco_10K_dataset/dataset/')
-    # dataset_dir = Path('coco_10K_dataset/test/')
+    dataset_dir = Path('/.dataset/')
+    # dataset_dir = Path('./test/')
 
     # Get the list of images in the dataset
     image_files = list(dataset_dir.glob('**/*'))
