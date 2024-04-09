@@ -33,9 +33,6 @@ skewed/unusual color distributions, and blurry. See datacleaner.py for more deta
 ![Data Cleaning](./readme_auxfiles/data_cleaning.png)
 
 ### Dependencies
-Google Chrome and Chromedriver are needed to run all the downloading steps. They are available for download
-[here](https://drive.google.com/drive/folders/11RDTfZAtHFtD_O0l-gpbNSHAfsys2mXJ?usp=sharing), and the folders
-should be placed into [/bin](./bin) folder.
 
 The following is a list of Python libraries required:
 - <ins>General purpose</ins>: ```numpy```, ```pandas```
