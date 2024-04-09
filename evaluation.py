@@ -3,10 +3,14 @@ import cv2
 import numpy as np
 from evaluation_helpers import calculate_psnr, calculate_ssim_channels, calculate_ssim_avg
 
-#Define the diredtories
-true_images_dir = "test/generator/ground_truth"
-gen_images_dir = "test/generator/colorized_1"
-ref_images_dir = "test/refinement/colorized_1"
+#Define the directories
+#prefix = "test_outputs"
+prefix = "train_outputs"
+# prefix = "val_outputs"
+
+true_images_dir = f"{prefix}/generator/ground_truth"
+gen_images_dir = f"{prefix}/generator/colorized_1"
+ref_images_dir = f"{prefix}/refinement/colorized_1"
 
 # Get a sorted list of all files in both directories
 true_images = sorted(os.listdir(true_images_dir))
@@ -80,3 +84,4 @@ if __name__ == "__main__":
     print("PSNR (Refinement):", psnr_mean_ref)
     print("SSIM (Generator):", ssim_mean_gen)
     print("SSIM (Refinement):", ssim_mean_ref)
+    print("Accessing: ", prefix)

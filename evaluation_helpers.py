@@ -16,6 +16,7 @@ def calculate_psnr(image_true, image_test, data_range=None):
     """
     Calculate the peak signal-to-noise ratio (PSNR) between two images.
     """
+    MIN_DATA_RANGE = 1e-12 # minimum data range to avoid division by zero in some instances
 
     # create data_range explicitly if not provided
     if data_range is None:
@@ -28,7 +29,7 @@ def calculate_psnr(image_true, image_test, data_range=None):
         
         # calculate data_range. assume data range does not exceed np type limits.
         data_range = np.ptp(image_true) # peak-to-peak value of the image
-        
+        data_range = data_range if data_range > MIN_DATA_RANGE else MIN_DATA_RANGE
     
     return peak_signal_noise_ratio(image_true, image_test, data_range=data_range)
 
@@ -111,6 +112,5 @@ def calculate_ssim_avg(image_true, image_test, data_range = None):
         
         if np.isnan(ssim):
             print(f"Warning: NaN SSIM value encountered for channel {i}. Variance: {np.var(image_true[..., i])}, Data range: {data_range:.12f}")
-
         ssim_values[i] = ssim
     return np.mean(ssim_values)

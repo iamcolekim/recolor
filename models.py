@@ -6,22 +6,23 @@ import torchvision.models as models
 
 class GeneratorModel(nn.Module):
     """
-    Description here
+    Generator model for image colorization, which predicts a low-resolution colorization.
+
+    Inputs: [B, 1, 224, 224] L channel
+    Outputs: [B, 2, 56, 56] ab channels
     """
 
     def __init__(self):
         super(GeneratorModel, self).__init__()
-        n_resnet_features = 128
 
-        # Load the pretrained ResNet-101
+        # Load the pretrained ResNet
         resnet = models.resnet18(num_classes=365)
-        # Change first conv layer to accept single-channel input
         resnet.conv1.weight = nn.Parameter(resnet.conv1.weight.sum(dim=1).unsqueeze(1))
-        # Extract midlevel features from ResNet-gray
         self.resnet_encoder = nn.Sequential(*list(resnet.children())[0:6])
 
+        # Downscaling for L channel
         self.resize = nn.AvgPool2d(8, 8)
-        self.conv1 = nn.Conv2d(512, 32, 1)
+
         self.conv2_1 = nn.Sequential(
             nn.Conv2d(129, 64, 3, padding=1),
             nn.BatchNorm2d(64),
@@ -43,124 +44,26 @@ class GeneratorModel(nn.Module):
         )
 
     def forward(self, x):
-        # x -> [1 x 224 x 224] L channel
-
-        # [128, 28, 28]
+        # Pass through ResNet encoder
         resnet_input = self.resnet_encoder(x)
 
-        # [1, 28, 28]
+        # Downscale L input and add to ResNet features
         image_input = self.resize(x)
-
-        # [129, 28, 28]
         comb_input = torch.cat([resnet_input, image_input], axis=1)
 
-        # [16, 224, 224]
+        # Process encodings
         out1 = self.conv2_1(comb_input)
-
-        # [2, 224, 224]
         x = F.sigmoid(self.conv3(out1))
-        # x = self.conv3(out1)
-
-        return x
-
-from models_helpers import RDB, RDB_Conv
-class baseline_refine(nn.Module):
-    """
-    Description here
-    """
-
-    def __init__(self):
-        super(baseline_refine, self).__init__()
-
-        self.upsample = nn.Upsample(scale_factor=4, mode="bilinear")
-
-    def forward(self, x):
-        # [3 x 56 x 56]
-        return self.upsample(x)
-
-class RefinementModel(nn.Module):
-    """
-    # Inspired by:
-    # Residual Dense Network for Image Super-Resolution
-    # https://arxiv.org/abs/1802.08797
-
-    This refinement model is a deep residual network
-    that uses residual dense blocks (RDBs) to extract features.
-    
-    Both global (from first conv layers) and local features from (RDBs) 
-    are fused to generate the final output.
-
-    Up-sampling is done using PixelShuffle. For more information, see:
-    https://arxiv.org/abs/1609.05158
-    """
-
-    def __init__(self, rdb_channel_in, rdb_channel_out, in_channels, k_size, scale_factor, rdb_depth = [1,5]):
-        super(RefinementModel, self).__init__()
-        C0 = rdb_channel_in
-        CN = rdb_channel_out
-        self.D = rdb_depth[0]
-        N = rdb_depth[1]
-
-        # Shallow Feature Extraction
-        self.sfe1 = nn.Conv2d(in_channels, C0, k_size, padding=(k_size-1)//2, stride=1)
-        self.sfe2 = nn.Conv2d(C0, C0, k_size, padding=(k_size-1)//2, stride=1)
-
-        # Residual Dense Blocks
-        self.RDBs = nn.ModuleList()
-        for i in range(self.D):
-            self.RDBs.append(RDB(C0, CN, N, k_size))
-
-        # Global Feature Fusion using 1x1 Convolution
-        self.gff = nn.Sequential(*[
-            nn.Conv2d(self.D * C0, C0, 1, padding=0, stride=1),
-            nn.Conv2d(C0, C0, k_size, padding=(k_size-1)//2, stride=1)
-        ])
-
-        # Up-sampling net
-            # This is a simple up-sampling net that uses PixelShuffle
-            # A common technique for up-sampling in super-resolution tasks
-        
-
-        if scale_factor == 2 or scale_factor == 3:
-            r = scale_factor
-            self.UPNet = nn.Sequential(*[
-                nn.Conv2d(C0, CN * r * r, k_size, padding=(k_size-1)//2, stride=1),
-                nn.PixelShuffle(r),
-                nn.Conv2d(CN, in_channels, k_size, padding=(k_size-1)//2, stride=1)
-            ])
-        elif scale_factor == 4:
-            r = scale_factor
-            self.UPNet = nn.Sequential(*[
-                nn.Conv2d(C0, CN * 4, k_size, padding=(k_size-1)//2, stride=1),
-                nn.PixelShuffle(2),
-                nn.Conv2d(CN, CN * 4, k_size, padding=(k_size-1)//2, stride=1),
-                nn.PixelShuffle(2),
-                nn.Conv2d(CN, in_channels, k_size, padding=(k_size-1)//2, stride=1)
-            ])
-        else:
-            raise ValueError("scale must be 2 or 3 or 4.")
-    def forward(self, x):
-        f__1 = self.sfe1(x)
-        x = self.sfe2(f__1)
-
-        # Residual Dense Blocks
-        RDBs_out = []
-        for i in range(self.D):
-            x = self.RDBs[i](x)
-            RDBs_out.append(x)
-
-        # Global Feature Fusion
-        x = self.gff(torch.cat(RDBs_out, 1)) + f__1
-
-        # Up-sampling net
-        x = self.UPNet(x)
 
         return x
 
 
 class RecolorModel(nn.Module):
     """
-    Description here
+    Combined generator-refinement model capable of performing image colorization on 224x224 images.
+
+    Inputs: [B, 1, 224, 224] L channel
+    Outputs: [B, 2, 224, 224] ab channels
     """
 
     def __init__(self, generator, refinement):
@@ -169,5 +72,106 @@ class RecolorModel(nn.Module):
         self.generator = generator
         self.refinement = refinement
 
+    def forward(self, L):
+        out = self.generator(L)
+        return self.refinement([L, out])
+
+
+class ResBlock(nn.Module):
+    """
+    Implementation of a residual block, as implemented in the EDSR model.
+    """
+
+    def __init__(self, n_feats, scale=1):
+        super(ResBlock, self).__init__()
+
+        # Body: conv -> ReLU -> conv
+        self.body = nn.Sequential(
+            nn.Conv2d(n_feats, n_feats, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(n_feats, n_feats, 3, padding=1)
+        )
+
+        self.res_scale = scale
+
     def forward(self, x):
-        return self.refinement(self.generator(x))
+        res = self.body(x).mul(self.res_scale)
+        res += x  # Residual connection
+        return res
+
+
+class RefinementModel(nn.Module):
+    """
+    Refinement model which takes a low resolution colorized image and the ground truth lightness image and predicts
+    a high-resolution colorized image.
+
+    Inputs: [B, 1, 224, 224] L channel, [B, 1, 56, 56] ab channels
+    Outputs: [B, 2, 224, 224] ab channels
+
+    This model was inspired by the code provided by https://medium.com/@paren8esis/an-introduction-to-super-resolution-with-deep-learning-pt-3-ed85ec949ba8
+
+    The info in the link is itself based on the EDSR model, which is a super-resolution model. The model is adapted
+    for colorization by changing the number of input and output channels.
+
+    Reference for EDSR:
+    Bee Lim, Sanghyun Son, Heewon Kim, Seungjun Nah, and Kyoung Mu Lee, "Enhanced Deep Residual Networks for Single Image Super-Resolution," 2nd NTIRE: New Trends in Image Restoration and Enhancement workshop and challenge on image super-resolution in conjunction with CVPR 2017.
+    """
+
+    def __init__(self):
+        super(RefinementModel, self).__init__()
+
+        # Load the pretrained ResNet
+        resnet = models.resnet18(num_classes=365)
+        resnet.conv1.weight = nn.Parameter(resnet.conv1.weight.sum(dim=1).unsqueeze(1))
+        self.resnet_encoder = nn.Sequential(*list(resnet.children())[0:5])
+
+        n_resblocks = 8
+        n_features = 128
+
+        # Head for processing of ab channels
+        self.head = nn.Sequential(
+            nn.Conv2d(2, 64, 3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU()
+        )
+
+        # ResBlock for processing of ab channels
+        self.res1 = ResBlock(64)
+
+        # Body for processing of combined L and ab encodings
+        body_layers = [ResBlock(n_features) for _ in range(n_resblocks)]
+        body_layers.append(nn.Conv2d(n_features, n_features, 3, padding=1))
+        self.body = nn.Sequential(*body_layers)
+
+        # Tail for upsampling
+        self.tail = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode="bicubic"),  # Attempt resize-convolution
+            nn.Conv2d(n_features, n_features, 3, padding=1),
+            nn.ReLU(),
+            nn.Upsample(scale_factor=2, mode="bicubic"),  # Attempt resize-convolution
+            nn.Conv2d(n_features, n_features, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(n_features, 2, 3, padding=1)
+        )
+
+    def forward(self, x):
+        L_in, ab_in = x
+
+        # Pass L input through ResNet to obtain encodings
+        x = self.resnet_encoder(L_in)
+
+        # Pass ab input through head and ResBlock to obtain encodings
+        y = self.head(ab_in)
+        y = self.res1(y)
+
+        # Combine L and ab encodings
+        skip = torch.cat([x, y], 1)
+
+        # Pass encodings into ResBlocks and apply additional skip connection at end
+        res = self.body(skip)
+        res += skip
+
+        # Apply 4x upscaling using Upsample-Conv
+        res = self.tail(res)
+
+        return F.sigmoid(res)

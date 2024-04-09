@@ -10,7 +10,9 @@ tempCodeRunnerFile.py
 test_outputs/
 train_outputs/
 val_outputs/
+video_colorization/
 lhq_1024_jpg/
+
 
 #personal stuff and caching
 personal/
