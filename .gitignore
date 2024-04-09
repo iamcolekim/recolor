@@ -1,16 +1,21 @@
 #macOS specific .gitignore
 .DS_STORE
 
-#Caching
-__pycache__/
-home/
 
 #vscode spcecific .gitignore
 .vscode/
 tempCodeRunnerFile.py
 
-#personal stuff:
+#Output Files and Dataset Images
+test_outputs/
+train_outputs/
+val_outputs/
+lhq_1024_jpg/
+
+#personal stuff and caching
 personal/
+__pycache__/
+home/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
