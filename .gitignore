@@ -1,8 +1,13 @@
 #macOS specific .gitignore
 .DS_STORE
 
+#Caching
+__pycache__/
+home/
+
 #vscode spcecific .gitignore
 .vscode/
+tempCodeRunnerFile.py
 
 #personal stuff:
 personal/
