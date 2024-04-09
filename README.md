@@ -38,13 +38,8 @@ Google Chrome and Chromedriver are needed to run all the downloading steps. They
 should be placed into [/bin](./bin) folder.
 
 The following is a list of Python libraries required:
-- <ins>Web scraping</ins>: ```selenium```
-- <ins>General purpose</ins>: ```numpy```, ```pandas```, ```pytz```
-- <ins>Machine learning</ins>: ```torch```, ```scipy```, ```scikit-learn```, ```statsmodels```, ```xgboost```
+- <ins>General purpose</ins>: ```numpy```, ```pandas```
+- <ins>Machine learning</ins>: ```torch```, ```torchvision```, ```scipy```, ```scikit-learn```
 - <ins>Image processing</ins>: ```pillow```, ```cv2```, ```scikit-image```
-- <ins>Visualizations</ins>: ```matplotlib```, ```plotly```, ```folium```
+- <ins>Visualizations and Metrics</ins>: ```matplotlib```, ```scikit-metrics```
 
-To install everything at once, use the following command.
-```bat
-pip install selenium numpy pandas pytz torch scipy scikit-learn statsmodels xgboost pillow cv2 scikit-image matplotlib plotly folium
-```
